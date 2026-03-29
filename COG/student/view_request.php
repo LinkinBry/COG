@@ -57,7 +57,7 @@ $history = $history_stmt->fetchAll(PDO::FETCH_ASSOC);
     <style>
         .sidebar {
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #800000 0%, #660000 100%);
             color: white;
             position: fixed;
             width: 260px;
@@ -123,7 +123,7 @@ $history = $history_stmt->fetchAll(PDO::FETCH_ASSOC);
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #667eea;
+            background: #800000;
         }
         .timeline-item:after {
             content: '';
