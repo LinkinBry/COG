@@ -33,12 +33,17 @@ $copies      = (int)$request['copies'];
 $description = 'COG Request – ' . $request['request_number']
              . ' (' . $copies . ' cop' . ($copies > 1 ? 'ies' : 'y') . ')';
 
+// Append ?ref= to cancel URL so cancel page knows which request to return to
+$baseCancel = rtrim(env('XENDIT_CANCEL_URL', ''), '?');
+putenv('XENDIT_CANCEL_URL=' . $baseCancel . '?ref=' . urlencode($request['request_number']));
+$_ENV['XENDIT_CANCEL_URL'] = $baseCancel . '?ref=' . urlencode($request['request_number']);
+
 $result = Xendit::createGCashPayment(
     (float)$request['amount'],
     $request['request_number'],
     $request['email'],
     $request['full_name'],
-    '',            // phone — students can enter in GCash app
+    '',
     $description
 );
 
@@ -54,6 +59,6 @@ $db->prepare(
       WHERE id = :id"
 )->execute([':cid' => $result['charge_id'], ':id' => $request_id]);
 
-// Redirect student to Xendit GCash checkout page
+// Redirect student to Xendit GCash sandbox checkout
 header('Location: ' . $result['checkout_url']);
 exit();

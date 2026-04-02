@@ -1,4 +1,5 @@
 <?php
+ini_set('error_log', __DIR__ . '/../php_errors.log');
 // config/env.php – Lightweight .env loader (no Composer required)
 
 function loadEnv(string $filePath): void {

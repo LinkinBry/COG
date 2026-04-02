@@ -30,22 +30,26 @@ class Xendit {
             return ['error' => 'Xendit API key is not configured. Please update your .env file.'];
         }
 
-        $successUrl  = env('XENDIT_SUCCESS_URL', '') . '?ref=' . urlencode($referenceNumber);
-        $cancelUrl   = env('XENDIT_CANCEL_URL', '');
-        $callbackUrl = env('XENDIT_CALLBACK_URL', '');
+        $successUrl = env('XENDIT_SUCCESS_URL', '') . '?ref=' . urlencode($referenceNumber);
+        $cancelUrl  = env('XENDIT_CANCEL_URL', '');
+
+        // Keep channel_properties minimal — mobile_number only if provided
+        $channelProps = [
+            'success_redirect_url' => $successUrl,
+            'cancel_redirect_url'  => $cancelUrl,
+            'failure_redirect_url' => $cancelUrl,
+        ];
+        if (!empty($phone)) {
+            $channelProps['mobile_number'] = $phone;
+        }
 
         $payload = [
             'reference_id'       => $referenceNumber,
             'currency'           => 'PHP',
-            'amount'             => (int) round($amount), // Xendit PHP amounts are whole pesos
+            'amount'             => (int) round($amount),
             'checkout_method'    => 'ONE_TIME_PAYMENT',
             'channel_code'       => 'PH_GCASH',
-            'channel_properties' => [
-                'success_redirect_url' => $successUrl,
-                'cancel_redirect_url'  => $cancelUrl,
-                'failure_redirect_url' => $cancelUrl,
-                'mobile_number'        => !empty($phone) ? $phone : '+639000000000', // placeholder for sandbox
-            ],
+            'channel_properties' => $channelProps,
             'metadata'           => [
                 'student_name'  => $name,
                 'student_email' => $email,
@@ -53,20 +57,16 @@ class Xendit {
             ],
         ];
 
-        // Pass the callback URL in the request header so no dashboard
-        // webhook registration is required (works in sandbox too).
-        $headers = ['Content-Type: application/json'];
-        if (!empty($callbackUrl)) {
-            $headers[] = 'webhook-url: ' . $callbackUrl;
-        }
+        $jsonPayload = json_encode($payload);
+        error_log("Xendit request payload: {$jsonPayload}");
 
         $ch = curl_init(self::baseUrl() . '/ewallets/charges');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_POSTFIELDS     => $jsonPayload,
             CURLOPT_USERPWD        => $apiKey . ':',
-            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
@@ -81,9 +81,11 @@ class Xendit {
             return ['error' => 'Payment gateway connection failed. Please try again.'];
         }
 
+        error_log("Xendit response ({$httpCode}): {$response}");
+
         $data = json_decode($response, true);
 
-        if ($httpCode === 201 && !empty($data['actions']['mobile_web_checkout_url'])) {
+        if (($httpCode === 201 || $httpCode === 202) && !empty($data['actions']['mobile_web_checkout_url'])) {
             return [
                 'checkout_url' => $data['actions']['mobile_web_checkout_url'],
                 'charge_id'    => $data['id'] ?? '',
@@ -91,23 +93,21 @@ class Xendit {
             ];
         }
 
+        // Surface full error detail during development
         $errMsg = $data['message'] ?? ($data['error_code'] ?? 'Payment request failed.');
-        error_log("Xendit API error ({$httpCode}): {$response}");
+        if (!empty($data['errors'])) {
+            $errMsg .= ' — ' . json_encode($data['errors']);
+        }
         return ['error' => $errMsg];
     }
 
     /**
      * Verify the Xendit webhook callback token.
-     * Xendit sends the token in the x-callback-token header.
-     *
-     * In sandbox/dev mode (no token configured), verification is skipped
-     * so you can test without setting up webhooks in the dashboard.
-     * Always set XENDIT_WEBHOOK_TOKEN in production.
+     * Skips verification in dev/sandbox when token is not configured.
      */
     public static function verifyWebhook(string $callbackToken): bool {
         $expected = env('XENDIT_WEBHOOK_TOKEN', '');
 
-        // Skip verification if token is not configured (sandbox/dev mode)
         if (empty($expected) || $expected === 'your_xendit_webhook_verification_token_here') {
             error_log("Xendit: XENDIT_WEBHOOK_TOKEN not set — skipping verification (dev mode).");
             return true;

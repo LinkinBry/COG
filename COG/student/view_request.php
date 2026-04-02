@@ -120,7 +120,7 @@ include '../includes/student_layout.php';
                     <?php if ($request['payment_status'] === 'unpaid'): ?>
                     <a href="process_payment.php?id=<?= $request_id ?>"
                        class="btn btn-success">
-                        <i class="bi bi-credit-card me-2"></i>Pay Online (GCash/Card)
+                        <i class="bi bi-credit-card me-2"></i>Pay Online (GCash)
                     </a>
                     <?php endif; ?>
                     <button onclick="window.print()" class="btn btn-outline-secondary">
