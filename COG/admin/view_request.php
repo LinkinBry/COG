@@ -349,10 +349,4 @@ $history = $hist->fetchAll();
             </div>
         </div>
     </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-<?php include '../includes/session_modal.php'; ?>
-<script src="../assets/js/session-timeout.js"></script>
-</body>
-</html>
+<?php include '../includes/admin_layout_end.php'; ?>

@@ -358,15 +358,4 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
             </div>
         </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function confirmDelete(id) {
-            if (confirm('Are you sure you want to delete this request? This action cannot be undone.')) {
-                window.location.href = '?delete=' + id + '&csrf_token=<?php echo Session::generateCSRFToken(); ?>';
-            }
-        }
-    </script>
-</body>
-</html>
+    <?php include '../includes/admin_layout_end.php'; ?>

@@ -1,0 +1,21 @@
+# Secrets
+.env
+*.env.local
+*.env.production
+
+# PHP
+vendor/
+composer.lock
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.log
+
+# User uploads / cache
+uploads/
+storage/
+cache/

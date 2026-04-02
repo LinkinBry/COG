@@ -728,30 +728,4 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </nav>
             <?php endif; ?>
         <?php endif; ?>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function confirmDelete(id, name) {
-            if (confirm('⚠️ Are you sure you want to delete student "' + name + '"?\n\nThis will also delete:\n• All their COG requests\n• All their notifications\n\nThis action cannot be undone!')) {
-                window.location.href = '?delete=' + id + '&csrf_token=<?php echo Session::generateCSRFToken(); ?>';
-            }
-        }
-
-        // Auto-hide alerts after 5 seconds
-        setTimeout(function() {
-            document.querySelectorAll('.alert').forEach(function(alert) {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            });
-        }, 5000);
-
-        // Add loading state to search button
-        document.querySelector('form').addEventListener('submit', function(e) {
-            const btn = this.querySelector('button[type="submit"]');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching...';
-            btn.disabled = true;
-        });
-    </script>
-</body>
-</html>
+    <?php include '../includes/admin_layout_end.php'; ?>
