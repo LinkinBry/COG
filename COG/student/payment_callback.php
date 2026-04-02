@@ -1,35 +1,61 @@
 <?php
-// student/payment_callback.php  –  HitPay webhook endpoint (POST only)
+// student/payment_callback.php  –  Xendit e-wallet webhook endpoint (POST only)
 define('SKIP_TIMEOUT_CHECK', true);
 require_once '../config/database.php';
 require_once '../config/session.php';
-require_once '../includes/HitPay.php';
+require_once '../includes/Xendit.php';
 
-// Only accept POST
+// Accept POST only
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405); echo 'Method Not Allowed'; exit();
 }
 
-$hmac = $_SERVER['HTTP_X_HITPAY_SIGNATURE'] ?? '';
-if (empty($hmac)) {
-    http_response_code(400); echo 'Missing signature'; exit();
+// Xendit sends the callback token in this header
+$callbackToken = $_SERVER['HTTP_X_CALLBACK_TOKEN'] ?? '';
+if (empty($callbackToken)) {
+    http_response_code(400); echo 'Missing callback token'; exit();
 }
 
-if (!HitPay::verifyWebhook($_POST, $hmac)) {
-    http_response_code(401); echo 'Invalid signature'; exit();
+if (!Xendit::verifyWebhook($callbackToken)) {
+    http_response_code(401); echo 'Invalid callback token'; exit();
 }
 
-$status    = $_POST['status']             ?? '';
-$reference = trim($_POST['reference_number'] ?? '');
-$amount    = $_POST['amount']             ?? '0';
-$paymentId = $_POST['payment_request_id'] ?? '';
+// Parse JSON body
+$raw  = file_get_contents('php://input');
+$body = json_decode($raw, true);
 
-// Only process completed payments
-if ($status !== 'completed') {
-    http_response_code(200); echo 'Acknowledged'; exit();
+if (!$body) {
+    http_response_code(400); echo 'Invalid JSON body'; exit();
 }
-if (empty($reference)) {
-    http_response_code(200); echo 'No reference'; exit();
+
+/*
+ * Xendit e-wallet webhook payload shape:
+ * {
+ *   "event": "ewallet.capture",
+ *   "data": {
+ *     "id": "ewc_xxxxx",
+ *     "reference_id": "COG-20240101-0001",
+ *     "status": "SUCCEEDED",
+ *     "charge_amount": 100,
+ *     "currency": "PHP",
+ *     ...
+ *   }
+ * }
+ */
+
+$event  = $body['event']                  ?? '';
+$data   = $body['data']                   ?? [];
+$status = strtoupper($data['status']      ?? '');
+$ref    = trim($data['reference_id']      ?? '');
+$amount = $data['charge_amount']          ?? ($data['captured_amount'] ?? 0);
+$chargeId = $data['id']                   ?? '';
+
+// Only process successful charges
+if ($status !== 'SUCCEEDED') {
+    http_response_code(200); echo 'Acknowledged non-success event'; exit();
+}
+if (empty($ref)) {
+    http_response_code(200); echo 'No reference_id'; exit();
 }
 
 $db = (new Database())->getConnection();
@@ -40,7 +66,7 @@ $stmt = $db->prepare(
        FROM cog_requests r JOIN users u ON r.user_id = u.id
       WHERE r.request_number = :ref AND r.payment_status = 'unpaid'"
 );
-$stmt->execute([':ref' => $reference]);
+$stmt->execute([':ref' => $ref]);
 $request = $stmt->fetch();
 
 if (!$request) {
@@ -55,9 +81,9 @@ try {
             SET payment_status = 'paid',
                 payment_date   = NOW(),
                 status         = CASE WHEN status = 'pending' THEN 'processing' ELSE status END,
-                admin_notes    = CONCAT(IFNULL(admin_notes,''), ' [paid_via_hitpay:', :pid, ']')
+                admin_notes    = CONCAT(IFNULL(admin_notes,''), ' [xendit_paid:', :cid, ']')
           WHERE id = :id"
-    )->execute([':pid' => $paymentId, ':id' => $request['id']]);
+    )->execute([':cid' => $chargeId, ':id' => $request['id']]);
 
     // Notify student
     $db->prepare(
@@ -65,7 +91,7 @@ try {
     )->execute([
         ':uid' => $request['uid'],
         ':rid' => $request['id'],
-        ':msg' => "✅ Payment of ₱{$amount} confirmed for request {$reference}. Your COG is now being processed.",
+        ':msg' => "✅ GCash payment of ₱{$amount} confirmed for request {$ref}. Your COG is now being processed.",
     ]);
 
     // Log status change
@@ -78,6 +104,6 @@ try {
     http_response_code(200); echo 'OK';
 } catch (Exception $e) {
     $db->rollBack();
-    error_log("HitPay webhook DB error: " . $e->getMessage());
+    error_log("Xendit webhook DB error: " . $e->getMessage());
     http_response_code(500); echo 'Internal error';
 }

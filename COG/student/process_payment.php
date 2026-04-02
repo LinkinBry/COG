@@ -1,8 +1,8 @@
 <?php
-// student/process_payment.php
+// student/process_payment.php  –  Redirects student to Xendit GCash checkout
 require_once '../config/database.php';
 require_once '../config/session.php';
-require_once '../includes/HitPay.php';
+require_once '../includes/Xendit.php';
 
 if (!Session::isLoggedIn() || Session::get('role') !== 'student') {
     Session::setFlash('error', 'Please login.'); header('Location: ../index.php'); exit();
@@ -29,17 +29,17 @@ if (!$request) {
     header('Location: my_requests.php'); exit();
 }
 
-$copies  = (int)$request['copies'];
-$purpose = 'COG Request – ' . $request['request_number']
-         . ' (' . $copies . ' cop' . ($copies > 1 ? 'ies' : 'y') . ')';
+$copies      = (int)$request['copies'];
+$description = 'COG Request – ' . $request['request_number']
+             . ' (' . $copies . ' cop' . ($copies > 1 ? 'ies' : 'y') . ')';
 
-$result = HitPay::createPayment(
+$result = Xendit::createGCashPayment(
     (float)$request['amount'],
     $request['request_number'],
     $request['email'],
     $request['full_name'],
-    '',
-    $purpose
+    '',            // phone — students can enter in GCash app
+    $description
 );
 
 if (isset($result['error'])) {
@@ -47,14 +47,13 @@ if (isset($result['error'])) {
     header("Location: view_request.php?id={$request_id}"); exit();
 }
 
-// Store HitPay payment request ID in admin_notes for reconciliation
-// (uses CONCAT so existing notes are preserved)
+// Store Xendit charge ID in admin_notes for reconciliation
 $db->prepare(
     "UPDATE cog_requests
-        SET admin_notes = CONCAT(IFNULL(admin_notes,''), ' [hitpay_id:', :hid, ']')
+        SET admin_notes = CONCAT(IFNULL(admin_notes,''), ' [xendit_charge:', :cid, ']')
       WHERE id = :id"
-)->execute([':hid' => $result['payment_id'], ':id' => $request_id]);
+)->execute([':cid' => $result['charge_id'], ':id' => $request_id]);
 
-// Redirect student to HitPay hosted checkout
-header('Location: ' . $result['url']);
+// Redirect student to Xendit GCash checkout page
+header('Location: ' . $result['checkout_url']);
 exit();
