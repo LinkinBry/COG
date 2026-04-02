@@ -1,5 +1,5 @@
 <?php
-// config/env.php  –  Lightweight .env loader (no Composer required)
+// config/env.php – Lightweight .env loader (no Composer required)
 
 function loadEnv(string $filePath): void {
     if (!file_exists($filePath)) {
@@ -27,7 +27,7 @@ function loadEnv(string $filePath): void {
     }
 }
 
-// Load from project root (one level above /config/)
+// Load from /workspaces/COG/COG/.env
 loadEnv(dirname(__DIR__) . '/.env');
 
 /**
