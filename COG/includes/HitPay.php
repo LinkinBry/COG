@@ -43,10 +43,7 @@ class HitPay {
             'cancel_url'              => $cancelUrl,
             'allow_repeated_payments' => false,
             'send_email'              => true,
-            'payment_methods'         => [
-                'paymaya', 'card', 'grab_pay', 'dob', 'dob_bpi',
-                'dob_rcbc', 'dob_chinabank', 'qr_ph',
-            ],
+            'payment_methods'         => ['gcash', 'card'], 
         ];
 
         $ch = curl_init(self::baseUrl() . '/payment-requests');

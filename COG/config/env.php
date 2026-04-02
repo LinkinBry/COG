@@ -13,6 +13,10 @@ function loadEnv(string $filePath): void {
         [$key, $value] = explode('=', $line, 2);
         $key   = trim($key);
         $value = trim($value);
+        // Strip inline comments
+        if (($pos = strpos($value, '#')) !== false) {
+            $value = trim(substr($value, 0, $pos));
+        }
         // Strip surrounding quotes
         if (strlen($value) >= 2) {
             $q = $value[0];

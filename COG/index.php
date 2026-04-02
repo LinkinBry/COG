@@ -23,9 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Please enter both email/student ID and password.';
         } else {
             $stmt = $db->prepare(
-                "SELECT * FROM users WHERE email = :id OR student_id = :id LIMIT 1"
+                "SELECT * FROM users WHERE email = ? OR student_id = ? LIMIT 1"
             );
-            $stmt->execute([':id' => $identifier]);
+            $stmt->execute([$identifier, $identifier]);
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password'])) {
