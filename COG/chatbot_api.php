@@ -23,7 +23,7 @@ if (empty($body['message'])) {
 }
 
 $apiKey = env('GROQ_API_KEY', '');
-$model  = env('GROQ_MODEL', 'llama3-8b-8192');
+$model  = env('GROQ_MODEL', 'llama-3.1-8b-instant');
 
 if (empty($apiKey) || $apiKey === 'your_groq_api_key_here') {
     echo json_encode(['error' => 'Chatbot is not configured yet. Please contact the administrator.']);
@@ -47,7 +47,10 @@ Help students with:
 Rules:
 - Keep answers concise (under 150 words) and friendly.
 - Redirect off-topic questions politely.
-- Respond in the same language the student uses (English or Filipino/Tagalog).
+- Respond in English by default. If the student asks in Filipino/Tagalog, respond in Filipino/Tagalog.
+- Use natural, conversational Tagalog when answering in Filipino/Tagalog. Prefer conversational phrases like "nandito ako" (not "ako'y dito"), "ako si COGBot" (not "ako'y COGBot"), "may tanong ka" (not "ako'y nandito upang tulungan ka"), and "sige"/"oke".
+- Avoid old-fashioned or overly formal Tagalog. Use the way a student would speak daily.
+- Use common Filipino polite markers ("po", "opo") as appropriate for tone.
 - Never make up information; stick to what you know about the COG system.
 SYS;
 
