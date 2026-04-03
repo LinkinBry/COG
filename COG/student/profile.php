@@ -2,6 +2,7 @@
 // student/profile.php
 require_once '../config/database.php';
 require_once '../config/session.php';
+require_once '../includes/Email.php';
 
 if (!Session::isLoggedIn() || Session::get('role') !== 'student') {
     Session::setFlash('error', 'Please login.'); header('Location: ../index.php'); exit();
@@ -34,7 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $error = 'Invalid email format.';
         elseif ($year_level < 1 || $year_level > 5) $error = 'Invalid year level.';
         else {
-            // Check email uniqueness
             $chk = $db->prepare("SELECT id FROM users WHERE email=:e AND id!=:id");
             $chk->execute([':e' => $email, ':id' => $user_id]);
             if ($chk->rowCount() > 0) {
@@ -45,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([':n' => $full_name, ':e' => $email, ':c' => $course, ':y' => $year_level, ':id' => $user_id]);
                 Session::set('user_name', $full_name);
                 $success = 'Profile updated successfully!';
-                // Refresh $user
                 $stmt->execute([':id' => $user_id]);
                 $user = $stmt->fetch();
             }
@@ -64,7 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else {
             $db->prepare("UPDATE users SET password=:p WHERE id=:id")
                ->execute([':p' => password_hash($new, PASSWORD_DEFAULT), ':id' => $user_id]);
-            $success = 'Password changed successfully!';
+
+            // ── Send password changed security alert ────────────────────────
+            Email::sendPasswordChanged($user['email'], $user['full_name']);
+            // ────────────────────────────────────────────────────────────────
+
+            $success = 'Password changed successfully! A security alert has been sent to your email.';
         }
     }
 }
@@ -166,6 +170,10 @@ include '../includes/student_layout.php';
     <div class="tab-pane fade" id="tabPassword">
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-body p-4">
+                <div class="alert alert-light border-start border-4 border-warning mb-3" style="font-size:13px;">
+                    <i class="bi bi-shield-check me-1 text-warning"></i>
+                    A security alert email will be sent to <strong><?= htmlspecialchars($user['email']) ?></strong> when you change your password.
+                </div>
                 <form method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?= Session::generateCSRFToken() ?>">
                     <input type="hidden" name="change_password" value="1">

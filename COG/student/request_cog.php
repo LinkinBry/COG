@@ -2,6 +2,7 @@
 // student/request_cog.php
 require_once '../config/database.php';
 require_once '../config/session.php';
+require_once '../includes/Email.php';
 
 if (!Session::isLoggedIn() || Session::get('role') !== 'student') {
     Session::setFlash('error', 'Please login to request COG.');
@@ -17,13 +18,6 @@ $stmt->execute([':id' => $user_id]);
 $user = $stmt->fetch();
 if (!$user) { Session::destroy(); header('Location: ../index.php'); exit(); }
 
-$unread_count = (int)$db->prepare(
-    "SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND is_read = FALSE"
-)->execute([':uid' => $user_id]) ? $db->query(
-    "SELECT COUNT(*) FROM notifications WHERE user_id = {$user_id} AND is_read = FALSE"
-)->fetchColumn() : 0;
-
-// Better unread count query
 $nq = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND is_read = FALSE");
 $nq->execute([':uid' => $user_id]);
 $unread_count = (int)$nq->fetchColumn();
@@ -78,7 +72,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $notif->execute([':uid' => $user_id, ':rid' => $request_id, ':msg' => $msg]);
 
                 $db->commit();
-                Session::setFlash('success', "Request submitted! Reference: {$request_number}");
+
+                // ── Send confirmation email to student ──────────────────────
+                Email::sendRequestConfirmation(
+                    $user['email'],
+                    $user['full_name'],
+                    $request_number,
+                    $final_purpose,
+                    $copies,
+                    $amount
+                );
+
+                // ── Notify admin(s) of new request ──────────────────────────
+                try {
+                    $db2 = (new Database())->getConnection();
+                    $adminStmt = $db2->query("SELECT email, full_name FROM admins LIMIT 5");
+                    while ($admin = $adminStmt->fetch()) {
+                        Email::sendAdminNewRequest(
+                            $admin['email'],
+                            $admin['full_name'],
+                            $user['full_name'],
+                            $user['student_id'],
+                            $request_number,
+                            $final_purpose,
+                            $copies,
+                            $amount
+                        );
+                    }
+                } catch (Exception $e) {
+                    error_log("Admin notification email error: " . $e->getMessage());
+                }
+                // ────────────────────────────────────────────────────────────
+
+                Session::setFlash('success', "Request submitted! Reference: {$request_number}. A confirmation email has been sent.");
                 header('Location: my_requests.php'); exit();
             } catch (Exception $e) {
                 $db->rollBack();
@@ -151,7 +177,7 @@ include '../includes/student_layout.php';
                             <li>Processing time: 2–3 working days</li>
                             <li>Pay online (GCash/Card) or at the Registrar's Office</li>
                             <li>Bring valid ID + school ID when claiming</li>
-                            <li>First-come, first-served basis</li>
+                            <li>A confirmation email will be sent to your registered email</li>
                         </ul>
                     </div>
 
@@ -187,7 +213,7 @@ include '../includes/student_layout.php';
 
     purposeSel.addEventListener('change', toggleOther);
     copiesInput.addEventListener('input', updateAmount);
-    toggleOther(); // init on page load (handles POST-back)
+    toggleOther();
     updateAmount();
 </script>
 

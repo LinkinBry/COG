@@ -2,6 +2,7 @@
 // register.php
 require_once 'config/database.php';
 require_once 'config/session.php';
+require_once 'includes/Email.php';
 
 if (Session::isLoggedIn()) {
     header("Location: index.php");
@@ -43,7 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt->bindParam(':year_level', $year_level);
         
         if ($stmt->execute()) {
-            $success = "Registration successful! You can now login.";
+            // ── Send welcome email ──────────────────────────────────────────
+            Email::sendWelcome($email, $full_name, $student_id);
+            // ───────────────────────────────────────────────────────────────
+
+            $success = "Registration successful! A welcome email has been sent. You can now login.";
         } else {
             $error = "Registration failed. Please try again.";
         }

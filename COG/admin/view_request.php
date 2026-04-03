@@ -2,6 +2,7 @@
 // admin/view_request.php
 require_once '../config/database.php';
 require_once '../config/session.php';
+require_once '../includes/Email.php';
 
 if (!Session::isLoggedIn() || Session::get('role') != 'admin') {
     Session::setFlash('error', 'Please login as admin.');
@@ -29,8 +30,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_request'])) {
 
     $db->beginTransaction();
     try {
-        // Get old status for history
-        $old = $db->prepare("SELECT status, user_id FROM cog_requests WHERE id = :id");
+        // Get old status + student info for notification & email
+        $old = $db->prepare(
+            "SELECT r.status, r.user_id, r.payment_status AS old_payment,
+                    u.email, u.full_name, r.request_number, r.amount
+               FROM cog_requests r JOIN users u ON r.user_id = u.id
+              WHERE r.id = :id"
+        );
         $old->execute([':id' => $request_id]);
         $old_row = $old->fetch();
 
@@ -51,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_request'])) {
             ':id'             => $request_id,
         ]);
 
-        // Status history
+        // Status history & student notification
         if ($old_row['status'] !== $new_status) {
             $hist = $db->prepare(
                 "INSERT INTO request_status_history (request_id, old_status, new_status, changed_by)
@@ -64,7 +70,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_request'])) {
                 ':by'  => Session::get('admin_id'),
             ]);
 
-            // Notify student
             $labels = [
                 'processing' => 'is now being processed',
                 'ready'      => 'is ready for pickup at the Registrar\'s Office',
@@ -81,10 +86,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_request'])) {
                 ':rid' => $request_id,
                 ':msg' => "Your COG request {$label}.",
             ]);
+
+            // ── Send status update email to student ─────────────────────────
+            Email::sendStatusUpdate(
+                $old_row['email'],
+                $old_row['full_name'],
+                $old_row['request_number'],
+                $new_status,
+                $admin_notes
+            );
+            // ────────────────────────────────────────────────────────────────
         }
 
+        // ── Send payment confirmation email if admin marks as paid ──────────
+        if ($payment_status === 'paid' && $old_row['old_payment'] !== 'paid') {
+            Email::sendPaymentConfirmation(
+                $old_row['email'],
+                $old_row['full_name'],
+                $old_row['request_number'],
+                (float)$old_row['amount'],
+                'Cash (Registrar\'s Office)'
+            );
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         $db->commit();
-        Session::setFlash('success', 'Request updated successfully!');
+        Session::setFlash('success', 'Request updated successfully! Student has been notified by email.');
     } catch (Exception $e) {
         $db->rollBack();
         error_log($e->getMessage());
@@ -152,6 +179,7 @@ $history = $hist->fetchAll();
         .timeline-item:last-child::after { display:none; }
         .btn-maroon { background:linear-gradient(135deg,#800000,#660000); color:#fff; border:none; }
         .btn-maroon:hover { transform:translateY(-2px); box-shadow:0 5px 15px rgba(128,0,0,.4); color:#fff; }
+        .email-notice { background:#e8f4fd; border-left:4px solid #0d6efd; border-radius:8px; padding:10px 14px; font-size:12px; color:#084298; margin-top:8px; }
     </style>
 </head>
 <body>
@@ -248,7 +276,7 @@ $history = $hist->fetchAll();
                 <?php if ($request['admin_notes']): ?>
                 <div class="alert alert-light border mt-3 mb-0">
                     <small class="text-muted"><strong>Admin Notes:</strong><br>
-                    <?= nl2br(htmlspecialchars($request['admin_notes'])) ?></small>
+                    <?= nl2br(htmlspecialchars(preg_replace('/\[xendit_\w+:[^\]]*\]/', '', $request['admin_notes']))) ?></small>
                 </div>
                 <?php endif; ?>
             </div>
@@ -256,6 +284,10 @@ $history = $hist->fetchAll();
             <!-- Update Form -->
             <div class="detail-card">
                 <h5 class="fw-bold mb-4"><i class="bi bi-pencil me-2 text-primary"></i>Update Request</h5>
+                <div class="email-notice mb-3">
+                    <i class="bi bi-envelope me-1"></i>
+                    <strong>Email notifications are automatic.</strong> The student will be emailed whenever you change the status or mark payment as paid.
+                </div>
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="<?= Session::generateCSRFToken() ?>">
                     <input type="hidden" name="update_request" value="1">
@@ -278,21 +310,16 @@ $history = $hist->fetchAll();
                             </select>
                         </div>
                         <div class="col-12">
-                            <label class="form-label fw-bold">Admin Notes</label>
+                            <label class="form-label fw-bold">Admin Notes <small class="text-muted">(included in student email)</small></label>
                             <textarea name="admin_notes" class="form-control" rows="3"
                                 placeholder="Add notes about this request…"><?= htmlspecialchars(
-                                    preg_replace('/\[hitpay_id:[^\]]*\]|\[paid_via_hitpay:[^\]]*\]/', '', $request['admin_notes'] ?? '')
+                                    preg_replace('/\[xendit_\w+:[^\]]*\]/', '', $request['admin_notes'] ?? '')
                                 ) ?></textarea>
                         </div>
                         <div class="col-12">
                             <button type="submit" class="btn btn-maroon px-4">
-                                <i class="bi bi-save me-2"></i>Save Changes
+                                <i class="bi bi-save me-2"></i>Save Changes &amp; Notify Student
                             </button>
-                            <?php if ($request['payment_status'] === 'paid' && $request['status'] === 'ready'): ?>
-                            <span class="ms-3 text-muted small">
-                                <i class="bi bi-info-circle"></i> Student has been notified their COG is ready.
-                            </span>
-                            <?php endif; ?>
                         </div>
                     </div>
                 </form>
@@ -337,7 +364,7 @@ $history = $hist->fetchAll();
                 <h5 class="fw-bold mb-3"><i class="bi bi-lightning me-2 text-warning"></i>Quick Actions</h5>
                 <div class="d-grid gap-2">
                     <a href="mailto:<?= htmlspecialchars($request['email']) ?>" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-envelope me-2"></i>Email Student
+                        <i class="bi bi-envelope me-2"></i>Email Student Directly
                     </a>
                     <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-printer me-2"></i>Print Request
