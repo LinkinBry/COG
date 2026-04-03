@@ -8,3 +8,5 @@ cd /workspaces/COG/COG
 sudo fuser -k 8000/tcp
 cd /workspaces/COG/COG
 php -S 0.0.0.0:8000 -t .
+
+ngrok http 8000
